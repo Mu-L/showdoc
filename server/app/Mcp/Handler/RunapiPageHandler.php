@@ -267,6 +267,8 @@ class RunapiPageHandler extends McpHandler
     $updateData = [];
     $pageTitle = trim($params['page_title'] ?? '');
     $pageContent = $params['page_content'] ?? null;
+    $catName = trim((string) ($params['cat_name'] ?? ''));
+    $targetCatId = (int) ($page->cat_id ?? 0);
 
     if ($pageContent !== null) {
       $this->validateRunapiContent($pageContent);
@@ -286,11 +288,16 @@ class RunapiPageHandler extends McpHandler
       $updateData['page_content'] = $contentString;
     }
 
+    if ($catName !== '') {
+      $targetCatId = $this->getOrCreateCatalog($itemId, $catName);
+      $updateData['cat_id'] = $targetCatId;
+    }
+
     if ($pageTitle !== '') {
       $tableName = $shard['tableName'];
       $existingPage = DB::table($tableName)
         ->where('item_id', $itemId)
-        ->where('cat_id', $page->cat_id)
+        ->where('cat_id', $targetCatId)
         ->where('page_title', $pageTitle)
         ->where('page_id', '<>', $pageId)
         ->where('is_del', 0)
@@ -299,6 +306,20 @@ class RunapiPageHandler extends McpHandler
         McpError::throw(McpError::OPERATION_FAILED, "页面标题已存在: {$pageTitle}");
       }
       $updateData['page_title'] = $pageTitle;
+    }
+
+    if ($pageTitle === '' && $catName !== '') {
+      // 仅改目录时，也要保证目标目录下标题不冲突
+      $existingInTargetCat = DB::table($shard['tableName'])
+        ->where('item_id', $itemId)
+        ->where('cat_id', $targetCatId)
+        ->where('page_title', (string) ($page->page_title ?? ''))
+        ->where('page_id', '<>', $pageId)
+        ->where('is_del', 0)
+        ->first();
+      if ($existingInTargetCat) {
+        McpError::throw(McpError::OPERATION_FAILED, '目标目录下已存在同名页面，无法移动');
+      }
     }
 
     if (empty($updateData) && ($params['expected_hash'] ?? null) === null) {
@@ -414,18 +435,30 @@ class RunapiPageHandler extends McpHandler
       $catId = $this->getOrCreateCatalog($itemId, $catName);
     }
 
-    $existingPage = DB::table($tableName)
+    // 检查页面是否已存在
+    // 当传入 cat_name 时，按 item_id + page_title 查找（忽略 cat_id），支持跨目录移动
+    // 当未传 cat_name 时，按 item_id + cat_id + page_title 判重，允许不同目录下存在同名页面
+    $query = DB::table($tableName)
       ->where('item_id', $itemId)
-      ->where('cat_id', $catId)
       ->where('page_title', $pageTitle)
-      ->where('is_del', 0)
-      ->first();
+      ->where('is_del', 0);
+
+    if ($catName === '') {
+      $query->where('cat_id', $catId);
+    }
+
+    $existingPage = $query->first();
 
     if ($existingPage) {
-      return $this->updateRunapiPage([
+      $updateParams = [
         'page_id' => $existingPage->page_id,
         'page_content' => $pageContent,
-      ], true);
+      ];
+      // 传入 cat_name 以支持移动目录
+      if ($catName !== '') {
+        $updateParams['cat_name'] = $catName;
+      }
+      return $this->updateRunapiPage($updateParams, true);
     }
 
     return $this->createRunapiPage($params, true);
@@ -492,7 +525,6 @@ class RunapiPageHandler extends McpHandler
         ->where('item_id', $itemId)
         ->where('cat_name', $name)
         ->where('parent_cat_id', $parentCatId)
-        ->where('level', $level)
         ->first();
 
       if ($catalog) {

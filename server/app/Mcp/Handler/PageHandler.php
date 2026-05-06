@@ -1479,20 +1479,31 @@ MARKDOWN;
       $catId = $this->getOrCreateCatalog($itemId, $catName);
     }
 
-    // 检查页面是否已存在（按 item_id + cat_id + page_title 判重，允许不同目录下存在同名页面）
-    $existingPage = DB::table($tableName)
+    // 检查页面是否已存在
+    // 当传入 cat_name 时，按 item_id + page_title 查找（忽略 cat_id），支持跨目录移动
+    // 当未传 cat_name 时，按 item_id + cat_id + page_title 判重，允许不同目录下存在同名页面
+    $query = DB::table($tableName)
       ->where('item_id', $itemId)
-      ->where('cat_id', $catId)
       ->where('page_title', $pageTitle)
-      ->where('is_del', 0)
-      ->first();
+      ->where('is_del', 0);
+
+    if ($catName === '') {
+      $query->where('cat_id', $catId);
+    }
+
+    $existingPage = $query->first();
 
     if ($existingPage) {
       // 更新已存在的页面（page_id 由内部通过 item_id+title 查得，不存在越权风险）
-      return $this->updatePage([
+      $updateParams = [
         'page_id' => $existingPage->page_id,
         'page_content' => $pageContent,
-      ], true);
+      ];
+      // 传入 cat_name 以支持移动目录
+      if ($catName !== '') {
+        $updateParams['cat_name'] = $catName;
+      }
+      return $this->updatePage($updateParams, true);
     }
 
     // 创建新页面（item_id 来自外层已验证的参数，不存在越权风险）
@@ -1632,12 +1643,11 @@ MARKDOWN;
       $depth++;
       $level = $depth + 1;
 
-      // 查找目录
+      // 查找目录（仅按 item_id + cat_name + parent_cat_id 匹配，不限制 level）
       $catalog = DB::table('catalog')
         ->where('item_id', $itemId)
         ->where('cat_name', $name)
         ->where('parent_cat_id', $parentCatId)
-        ->where('level', $level)
         ->first();
 
       if ($catalog) {

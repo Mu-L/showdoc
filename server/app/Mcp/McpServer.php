@@ -460,7 +460,7 @@ class McpServer
             'description' => '期望的当前内容哈希（乐观锁，可选）',
           ],
         ],
-        'required' => ['page_id', 'page_content'],
+        'required' => ['page_id'],
       ],
       'handler' => 'page',
     ];
