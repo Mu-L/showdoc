@@ -348,6 +348,125 @@ class AdminSettingController extends BaseController
     }
 
     /**
+     * 同步LDAP用户（兼容旧接口 Api/AdminSetting/syncLdapUsers）
+     */
+    public function syncLdapUsers(Request $request, Response $response): Response
+    {
+        set_time_limit(60);
+        ini_set('memory_limit', '500M');
+
+        $loginUser = [];
+        if ($error = $this->requireLoginUser($request, $response, $loginUser)) {
+            return $error;
+        }
+
+        $adminCheck = $this->checkAdmin($request, $response);
+        if ($adminCheck !== true) {
+            return $adminCheck;
+        }
+
+        $ldapOpen = Options::get("ldap_open");
+        if (!$ldapOpen) {
+            return $this->error($response, 10011, 'LDAP 未启用');
+        }
+
+        $ldapForm = Options::get("ldap_form");
+        $ldapForm = $ldapForm ? json_decode($ldapForm, true) : null;
+        if (!$ldapForm || empty($ldapForm['host'])) {
+            return $this->error($response, 10011, 'LDAP 配置不完整');
+        }
+
+        if (!extension_loaded('ldap')) {
+            return $this->error($response, 10011, "你尚未安装php-ldap扩展。如果是普通PHP环境，请手动安装之。如果是使用之前官方docker镜像，则需要重新安装镜像。方法是：备份 /showdoc_data 整个目录，然后全新安装showdoc，接着用备份覆盖/showdoc_data 。然后递归赋予777可写权限。");
+        }
+
+        $ldapConn = ldap_connect($ldapForm['host'], $ldapForm['port']);
+        if (!$ldapConn) {
+            return $this->error($response, 10011, "Can't connect to LDAP server");
+        }
+
+        $ldapForm['bind_password'] = htmlspecialchars_decode($ldapForm['bind_password'] ?? '');
+
+        ldap_set_option($ldapConn, LDAP_OPT_PROTOCOL_VERSION, $ldapForm['version']);
+        $rs = ldap_bind($ldapConn, $ldapForm['bind_dn'], $ldapForm['bind_password']);
+        if (!$rs) {
+            return $this->error($response, 10011, "Can't bind to LDAP server");
+        }
+
+        $ldapForm['search_filter'] = !empty($ldapForm['search_filter']) ? $ldapForm['search_filter'] : '(cn=*)';
+        $ldapForm['search_filter'] = trim(htmlspecialchars_decode($ldapForm['search_filter'] ?? ''));
+
+        $hasPlaceholder = strpos($ldapForm['search_filter'], '%(user)s') !== false;
+        if ($hasPlaceholder) {
+            $syncFilter = preg_replace('/%\(user\)s/', '*', $ldapForm['search_filter']);
+        } else {
+            $syncFilter = $ldapForm['search_filter'];
+        }
+
+        $hasObjectclass = preg_match('/objectclass/i', $syncFilter);
+        if (!$hasObjectclass) {
+            $userFilter = '(|(objectClass=user)(objectClass=person)(objectClass=inetOrgPerson))';
+            $excludeFilter = '(!(objectClass=computer))(!(objectClass=group))(!(objectClass=organizationalUnit))';
+
+            if (preg_match('/^\([^&|!]/', $syncFilter)) {
+                $syncFilter = '(&' . $userFilter . $excludeFilter . $syncFilter . ')';
+            } else if (preg_match('/^\(&/', $syncFilter)) {
+                $syncFilter = preg_replace('/^\(&/', '(&' . $userFilter . $excludeFilter, $syncFilter);
+            } else if (preg_match('/^\(\|/', $syncFilter)) {
+                $syncFilter = '(&' . $userFilter . $excludeFilter . $syncFilter . ')';
+            }
+        }
+
+        $result = ldap_search($ldapConn, $ldapForm['base_dn'], $syncFilter);
+        if (!$result) {
+            return $this->error($response, 10011, "LDAP搜索失败，请检查 search filter 配置是否正确");
+        }
+
+        $data = ldap_get_entries($ldapConn, $result);
+
+        $userFieldLower = strtolower($ldapForm['user_field'] ?? 'cn');
+        $nameFieldLower = !empty($ldapForm['name_field']) ? strtolower($ldapForm['name_field']) : '';
+        $syncCount = 0;
+
+        for ($i = 0; $i < $data["count"]; $i++) {
+            $ldapUser = null;
+            foreach ($data[$i] as $key => $value) {
+                if (strtolower($key) === $userFieldLower && isset($value['count']) && $value['count'] > 0) {
+                    $ldapUser = $value[0];
+                    break;
+                }
+            }
+
+            if (!$ldapUser) {
+                continue;
+            }
+
+            $ldapName = '';
+            if ($nameFieldLower) {
+                foreach ($data[$i] as $key => $value) {
+                    if (strtolower($key) === $nameFieldLower && isset($value['count']) && $value['count'] > 0) {
+                        $ldapName = $value[0];
+                        break;
+                    }
+                }
+            }
+
+            $userInfo = \App\Model\User::findByUsername($ldapUser);
+            if (!$userInfo) {
+                $uid = \App\Model\User::register($ldapUser, $ldapUser . FileHelper::getRandStr());
+                if ($uid && $ldapName) {
+                    DB::table('user')->where('uid', $uid)->update(['name' => $ldapName]);
+                }
+                $syncCount++;
+            } else if ($ldapName) {
+                DB::table('user')->where('uid', $userInfo->uid)->update(['name' => $ldapName]);
+            }
+        }
+
+        return $this->success($response, ['sync_count' => $syncCount]);
+    }
+
+    /**
      * 保存OAuth2配置（兼容旧接口 Api/AdminSetting/saveOauth2Config）
      */
     public function saveOauth2Config(Request $request, Response $response): Response
