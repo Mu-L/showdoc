@@ -157,7 +157,7 @@ const emit = defineEmits<{ reload: [] }>()
 const { t } = useI18n()
 const userStore = useUserStore()
 
-const kanbanExtInfo = (taskData: KanbanTaskData) => JSON.stringify({ completed: !!taskData.completed, tags: taskData.tags || [] })
+const kanbanExtInfo = (taskData: KanbanTaskData) => JSON.stringify({ completed: !!taskData.completed, tags: taskData.tags || [], priority: taskData.priority || '', assignee_uid: taskData.assignee_uid || '', assignee_username: taskData.assignee_username || '', due_date: taskData.due_date || '' })
 
 const boardData = ref<KanbanBoardData | null>(null)
 const boardPageId = ref(0)

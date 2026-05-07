@@ -71,6 +71,9 @@ const generateToc = () => {
 
   tocItems.value = []
 
+  // 追踪每个 id 的出现次数，用于去重
+  const idCounts: Record<string, number> = {}
+
   headings.forEach((heading) => {
     let id = heading.getAttribute('id')
 
@@ -79,6 +82,16 @@ const generateToc = () => {
       const level = heading.tagName.charAt(1)
       id = `heading-${level}-${Math.random().toString(36).substr(2, 9)}`
       heading.setAttribute('id', id)
+    }
+
+    // 同名标题去重：第一个保持原 id，后续追加 -1, -2 ... 后缀
+    if (idCounts[id] !== undefined) {
+      idCounts[id]++
+      const newId = `${id}-${idCounts[id]}`
+      heading.setAttribute('id', newId)
+      id = newId
+    } else {
+      idCounts[id] = 0
     }
 
     const text = heading.textContent || ''

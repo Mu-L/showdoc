@@ -2,7 +2,7 @@
   <a-popover
     v-model:open="showPopover"
     :placement="placement"
-    trigger="hover"
+    :trigger="effectiveTrigger"
     :overlayStyle="{ zIndex: 999 }"
   >
     <template #content>
@@ -68,7 +68,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 
 interface MenuItem {
   title: string
@@ -101,6 +101,28 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const showPopover = ref(false)
+
+// 移动端检测：基于屏幕宽度，小屏幕降级为 click
+const MOBILE_BREAKPOINT = 768
+const isMobile = ref(false)
+const mobileMediaQuery = typeof window !== 'undefined' ? window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT}px)`) : null
+
+const updateMobileState = () => {
+  isMobile.value = mobileMediaQuery ? mobileMediaQuery.matches : false
+}
+
+const effectiveTrigger = computed(() => {
+  return isMobile.value ? 'click' : 'hover'
+})
+
+onMounted(() => {
+  updateMobileState()
+  mobileMediaQuery?.addEventListener('change', updateMobileState)
+})
+
+onUnmounted(() => {
+  mobileMediaQuery?.removeEventListener('change', updateMobileState)
+})
 
 const handleMenuClick = (item: MenuItem) => {
   // 先关闭弹窗

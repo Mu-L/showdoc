@@ -59,6 +59,10 @@ class KanbanHandler extends McpHandler
     $extInfo = json_encode([
       'completed' => (bool) ($taskData['completed'] ?? false),
       'tags' => $taskData['tags'] ?? [],
+      'priority' => $taskData['priority'] ?? '',
+      'assignee_uid' => $taskData['assignee_uid'] ?? '',
+      'assignee_username' => $taskData['assignee_username'] ?? '',
+      'due_date' => $taskData['due_date'] ?? '',
     ], JSON_UNESCAPED_UNICODE);
     Page::savePage($pageId, $itemId, [
       'page_content' => $content,
@@ -647,7 +651,14 @@ class KanbanHandler extends McpHandler
     $data = [
       'page_title' => $title,
       'page_content' => $content,
-      'ext_info' => json_encode(['completed' => false, 'tags' => $tags], JSON_UNESCAPED_UNICODE),
+      'ext_info' => json_encode([
+        'completed' => false,
+        'tags' => $tags,
+        'priority' => $priority,
+        'assignee_uid' => '',
+        'assignee_username' => '',
+        'due_date' => $params['due_date'] ?? '',
+      ], JSON_UNESCAPED_UNICODE),
       'item_id' => $itemId,
       'cat_id' => 0,
       's_number' => 99,
@@ -1251,4 +1262,5 @@ class KanbanHandler extends McpHandler
         'event_data' => json_decode($log->event_data, true) ?? [],
         'operator_uid' => $uid,
         'operator_username' => $operatorNames[$uid] ?? '',
-        'addtime' => (int) $log->addtime,                                                                                                                                                                                                  
+        'addtime' => (int) $log->addtime,
+                                                                                                                                                                                                  

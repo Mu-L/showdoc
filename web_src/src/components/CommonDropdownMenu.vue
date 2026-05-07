@@ -8,7 +8,7 @@
     <!-- 触发按钮 - 支持插槽自定义 -->
     <div 
       class="trigger-button"
-      @click="trigger === 'click' && handleToggleMenu()"
+      @click="effectiveTrigger === 'click' && handleToggleMenu()"
     >
       <slot>
         <!-- 默认的更多按钮 -->
@@ -49,7 +49,7 @@
     <!-- 点击模式下的遮罩层 -->
     <Teleport to="body">
       <div 
-        v-if="visible && trigger === 'click'" 
+        v-if="visible && effectiveTrigger === 'click'" 
         class="dropdown-overlay"
         @click="handleClose"
       />
@@ -58,7 +58,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { getIconClass } from '@/utils/icon'
 
 // 菜单项接口
@@ -96,6 +96,23 @@ let hideTimer: number | null = null
 // 标记鼠标位置状态（用于 hover 模式）
 let isMouseInContainer = false
 let isMouseInMenu = false
+
+// 移动端检测：基于屏幕宽度，小屏幕降级为 click
+const MOBILE_BREAKPOINT = 768
+const isMobile = ref(false)
+const mobileMediaQuery = typeof window !== 'undefined' ? window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT}px)`) : null
+
+const updateMobileState = () => {
+  isMobile.value = mobileMediaQuery ? mobileMediaQuery.matches : false
+}
+
+// 实际生效的 trigger：hover 模式在移动端降级为 click
+const effectiveTrigger = computed(() => {
+  if (props.trigger === 'hover' && isMobile.value) {
+    return 'click'
+  }
+  return props.trigger
+})
 
 // Computed
 const menuStyle = computed(() => {
@@ -169,20 +186,20 @@ const scheduleHide = () => {
 
 // 容器的 hover 事件
 const handleContainerEnter = () => {
-  if (props.trigger !== 'hover') return
+  if (effectiveTrigger.value !== 'hover') return
   isMouseInContainer = true
   showMenu()
 }
 
 const handleContainerLeave = () => {
-  if (props.trigger !== 'hover') return
+  if (effectiveTrigger.value !== 'hover') return
   isMouseInContainer = false
   scheduleHide()
 }
 
 // 菜单的 hover 事件
 const handleMenuEnter = () => {
-  if (props.trigger !== 'hover') return
+  if (effectiveTrigger.value !== 'hover') return
   isMouseInMenu = true
   if (hideTimer) {
     clearTimeout(hideTimer)
@@ -191,7 +208,7 @@ const handleMenuEnter = () => {
 }
 
 const handleMenuLeave = () => {
-  if (props.trigger !== 'hover') return
+  if (effectiveTrigger.value !== 'hover') return
   isMouseInMenu = false
   scheduleHide()
 }
@@ -217,7 +234,7 @@ const handleItemClick = (item: DropdownMenuItem) => {
 
 // 点击模式下的全局点击关闭
 const handleGlobalClick = (event: MouseEvent) => {
-  if (props.trigger !== 'click' || !visible.value) return
+  if (effectiveTrigger.value !== 'click' || !visible.value) return
   
   const target = event.target as HTMLElement
   if (!target.closest('.common-dropdown-menu') && !target.closest('.dropdown-menu-container')) {
@@ -226,17 +243,27 @@ const handleGlobalClick = (event: MouseEvent) => {
 }
 
 onMounted(() => {
-  if (props.trigger === 'click') {
-    document.addEventListener('click', handleGlobalClick)
-  }
+  updateMobileState()
+  mobileMediaQuery?.addEventListener('change', updateMobileState)
 })
 
 onUnmounted(() => {
   if (hideTimer) {
     clearTimeout(hideTimer)
   }
+  mobileMediaQuery?.removeEventListener('change', updateMobileState)
   document.removeEventListener('click', handleGlobalClick)
 })
+
+// 当 effectiveTrigger 变化时，切换全局点击监听
+watch(effectiveTrigger, (newTrigger, oldTrigger) => {
+  if (oldTrigger === 'click') {
+    document.removeEventListener('click', handleGlobalClick)
+  }
+  if (newTrigger === 'click') {
+    document.addEventListener('click', handleGlobalClick)
+  }
+}, { immediate: true })
 </script>
 
 <style lang="scss">

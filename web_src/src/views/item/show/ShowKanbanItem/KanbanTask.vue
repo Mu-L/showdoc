@@ -1,5 +1,13 @@
 <template>
-  <div class="kanban-task" :class="{ 'is-completed': isCompleted }" @click="$emit('click')" @contextmenu.prevent="handleContextMenu">
+  <div
+    class="kanban-task"
+    :class="[
+      isCompleted ? 'is-completed' : '',
+      priorityClass,
+    ]"
+    @click="$emit('click')"
+    @contextmenu.prevent="handleContextMenu"
+  >
     <div class="task-tags" v-if="displayTags.length">
       <span
         v-for="(tag, idx) in displayTags.slice(0, 3)"
@@ -9,22 +17,22 @@
       >{{ tag.text }}</span>
     </div>
     <div class="task-title">
-      <span v-if="taskData?.priority === 'high'" class="priority-icon">🔺</span>
-      <span v-else-if="taskData?.priority === 'low'" class="priority-icon">🟢</span>
+      <span v-if="displayPriority === 'high'" class="priority-icon">🔺</span>
+      <span v-else-if="displayPriority === 'low'" class="priority-icon">🟢</span>
       {{ taskPage?.page_title || '' }}
     </div>
     <div class="task-meta">
-      <span v-if="taskData?.assignee_username" class="meta-assignee">
+      <span v-if="displayAssigneeUsername" class="meta-assignee">
         <i class="fas fa-user meta-icon"></i>
-        {{ taskData.assignee_username }}
+        {{ displayAssigneeUsername }}
       </span>
       <span
-        v-if="taskData?.due_date"
+        v-if="displayDueDate"
         class="meta-due"
         :class="{ 'is-overdue': isOverdue }"
       >
         <i class="fas fa-calendar meta-icon"></i>
-        {{ formatDate(taskData.due_date) }}
+        {{ formatDate(displayDueDate) }}
       </span>
       <span v-if="taskData?.linked_pages?.length" class="meta-linked">
         <i class="fas fa-link meta-icon"></i>
@@ -58,24 +66,31 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 
-const tagsFromExtInfo = (): KanbanTag[] => {
+const parsedExtInfo = (): Record<string, any> | null => {
   if (props.taskPage?.ext_info) {
-    try {
-      const info = JSON.parse(props.taskPage.ext_info)
-      if (Array.isArray(info.tags) && info.tags.length) return info.tags
-    } catch { /* ignore */ }
+    try { return JSON.parse(props.taskPage.ext_info) } catch { return null }
   }
+  return null
+}
+
+const tagsFromExtInfo = (): KanbanTag[] => {
+  const info = parsedExtInfo()
+  if (info && Array.isArray(info.tags) && info.tags.length) return info.tags
   return []
 }
 
 const displayTags = computed(() => props.taskData?.tags?.length ? props.taskData.tags : tagsFromExtInfo())
 
+const displayPriority = computed(() => props.taskData?.priority || parsedExtInfo()?.priority || '')
+
+const displayAssigneeUsername = computed(() => props.taskData?.assignee_username || parsedExtInfo()?.assignee_username || '')
+
+const displayDueDate = computed(() => props.taskData?.due_date || parsedExtInfo()?.due_date || '')
+
 const isCompleted = computed(() => {
   if (props.taskData) return !!props.taskData.completed
-  if (props.taskPage?.ext_info) {
-    try { return !!JSON.parse(props.taskPage.ext_info).completed } catch { return false }
-  }
-  return false
+  const info = parsedExtInfo()
+  return info ? !!info.completed : false
 })
 
 const tagColorMap: Record<string, string> = {
@@ -98,9 +113,16 @@ const tagBgMap: Record<string, string> = {
   gray: 'rgba(108, 117, 125, 0.1)',
 }
 
+const priorityClass = computed(() => {
+  const p = displayPriority.value
+  if (p === 'high') return 'priority-high'
+  if (p === 'low') return 'priority-low'
+  return ''
+})
+
 const isOverdue = computed(() => {
-  if (!props.taskData?.due_date) return false
-  return props.taskData.due_date < new Date().toISOString().slice(0, 10)
+  if (!displayDueDate.value) return false
+  return displayDueDate.value < new Date().toISOString().slice(0, 10)
 })
 
 const formatDate = (dateStr: string) => {
@@ -145,6 +167,7 @@ const handleContextMenu = (e: MouseEvent) => {
 .kanban-task {
   background: var(--color-obvious);
   border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-border);
   border-radius: 6px;
   padding: 10px;
   margin-bottom: 8px;
@@ -155,6 +178,14 @@ const handleContextMenu = (e: MouseEvent) => {
   &:hover {
     box-shadow: var(--shadow-default);
     border-color: var(--color-inactive);
+  }
+
+  &.priority-high {
+    border-left-color: #f5222d;
+  }
+
+  &.priority-low {
+    border-left-color: #52c41a;
   }
 }
 
