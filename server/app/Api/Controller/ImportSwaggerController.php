@@ -796,16 +796,19 @@ class ImportSwaggerController extends BaseController
                         json_decode($unescapedExample) !== null
                     ) {
                         $contentArray['response']['responseExample'] = $unescapedExample;
-                        $parsedExample = json_decode($unescapedExample, true);
-                        if (json_last_error() === JSON_ERROR_NONE) {
-                            $contentArray['response']['responseParamsDesc'] = $this->exampleToParamsDesc($parsedExample);
-                        }
                     } else {
                         $contentArray['response']['responseExample'] = $example;
                     }
                 } else {
                     $contentArray['response']['responseExample'] = json_encode($example);
-                    $contentArray['response']['responseParamsDesc'] = $this->exampleToParamsDesc($example);
+                }
+                // 优先从 schema 提取带 description 的参数描述
+                if (!empty($refArray)) {
+                    $contentArray['response']['responseParamsDesc'] = $this->definitionToJsonArray($refArray);
+                } else {
+                    $contentArray['response']['responseParamsDesc'] = $this->exampleToParamsDesc(
+                        is_string($example) ? json_decode($example, true) ?? $example : $example
+                    );
                 }
             } elseif (!empty($refArray)) {
                 $jsonArray = $this->definitionToJsonArray($refArray);
@@ -830,63 +833,53 @@ class ImportSwaggerController extends BaseController
 
             if (isset($request['responses']['200']['content'])) {
                 foreach ($request['responses']['200']['content'] as $contentType => $content) {
-                    if (isset($content['examples']) && !empty($content['examples'])) {
+                    // 始终提取 schema（含 description 信息）
+                    if (isset($content['schema'])) {
+                        $refArray = $content['schema'];
+                    }
+
+                    // 提取 example（仅用于生成示例 JSON）
+                    if ($example === null && isset($content['examples']) && !empty($content['examples'])) {
                         foreach ($content['examples'] as $exampleKey => $exampleObj) {
                             if (isset($exampleObj['value'])) {
                                 $example = $exampleObj['value'];
                                 break;
                             }
                         }
-                        if ($example !== null) {
-                            break;
-                        }
                     }
 
-                    if (isset($content['example'])) {
+                    if ($example === null && isset($content['example'])) {
                         $example = $content['example'];
-                        break;
                     }
 
-                    if (isset($content['schema']['example'])) {
+                    if ($example === null && isset($content['schema']['example'])) {
                         $example = $content['schema']['example'];
-                        break;
-                    }
-
-                    if (isset($content['schema'])) {
-                        $refArray = $content['schema'];
                     }
                 }
             }
 
             if ($example !== null) {
+                // example 仅用于 responseExample（示例 JSON）
                 if (is_string($example)) {
                     $unescapedExample = stripslashes($example);
                     if ((substr($unescapedExample, 0, 1) === '{' || substr($unescapedExample, 0, 1) === '[') &&
                         json_decode($unescapedExample) !== null
                     ) {
                         $contentArray['response']['responseExample'] = $unescapedExample;
-                        $parsedExample = json_decode($unescapedExample, true);
-                        if (json_last_error() === JSON_ERROR_NONE) {
-                            $contentArray['response']['responseParamsDesc'] = $this->exampleToParamsDesc($parsedExample);
-                        } elseif (!empty($refArray)) {
-                            $jsonArray = $this->definitionToJsonArray($refArray);
-                            $contentArray['response']['responseParamsDesc'] = $jsonArray;
-                        }
                     } else {
                         $contentArray['response']['responseExample'] = $example;
-                        if (!empty($refArray)) {
-                            $jsonArray = $this->definitionToJsonArray($refArray);
-                            $contentArray['response']['responseParamsDesc'] = $jsonArray;
-                        }
                     }
                 } else {
                     $contentArray['response']['responseExample'] = json_encode($example);
-                    if (is_array($example) || is_object($example)) {
-                        $contentArray['response']['responseParamsDesc'] = $this->exampleToParamsDesc($example);
-                    } elseif (!empty($refArray)) {
-                        $jsonArray = $this->definitionToJsonArray($refArray);
-                        $contentArray['response']['responseParamsDesc'] = $jsonArray;
-                    }
+                }
+                // responseParamsDesc 始终优先从 schema 提取（含 description/remark）
+                if (!empty($refArray)) {
+                    $contentArray['response']['responseParamsDesc'] = $this->definitionToJsonArray($refArray);
+                } else {
+                    // 无 schema 时才从 example 推导（无 description）
+                    $contentArray['response']['responseParamsDesc'] = $this->exampleToParamsDesc(
+                        is_string($example) ? json_decode($example, true) ?? $example : $example
+                    );
                 }
             } elseif (!empty($refArray)) {
                 $jsonArray = $this->definitionToJsonArray($refArray);
