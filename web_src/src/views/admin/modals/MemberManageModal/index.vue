@@ -7,6 +7,25 @@
         :leftIcon="['fas', 'plus']"
         @click="showAddMemberModal"
       />
+      <CommonButton
+        theme="dark"
+        :text="$t('admin.add_team')"
+        :leftIcon="['fas', 'plus']"
+        @click="handleAddTeam"
+      />
+    </div>
+
+    <!-- 添加团队内联区域 -->
+    <div v-if="showAddTeam" class="add-team-inline">
+      <div class="add-team-form">
+        <CommonSelector
+          v-model:value="selectedTeamId"
+          :placeholder="$t('admin.select_team')"
+          :options="teamOptions"
+        />
+        <CommonButton theme="dark" :text="$t('common.confirm')" @click="handleSubmitAddTeam" />
+        <CommonButton theme="light" :text="$t('common.cancel')" @click="showAddTeam = false" />
+      </div>
     </div>
 
     <CommonTab
@@ -56,6 +75,10 @@
               <i class="fas fa-eye"></i>
               {{ $t('admin.view_member') }}
             </span>
+            <span class="table-action-btn delete" @click="handleUnbindTeam(row)">
+              <i class="fas fa-unlink"></i>
+              {{ $t('admin.unbind') }}
+            </span>
           </div>
         </template>
       </CommonTable>
@@ -73,7 +96,8 @@ import CommonButton from '@/components/CommonButton.vue'
 import CommonTable from '@/components/CommonTable.vue'
 import CommonTab from '@/components/CommonTab.vue'
 import { getMemberList, deleteMember as deleteMemberApi } from '@/models/member'
-import { getTeamItemList } from '@/models/team'
+import { getTeamItemList, getTeamList, saveTeamItem, deleteTeamItem } from '@/models/team'
+import CommonSelector from '@/components/CommonSelector.vue'
 import addMemberToItemModal from '../AddMemberToItemModal'
 import viewTeamMembersModal from '../ViewTeamMembersModal'
 
@@ -88,6 +112,16 @@ const show = ref(false)
 const memberActiveTab = ref('members')
 const members = ref<any[]>([])
 const teamList = ref<any[]>([])
+
+const showAddTeam = ref(false)
+const selectedTeamId = ref('')
+const allTeams = ref<any[]>([])
+const teamOptions = computed(() =>
+  allTeams.value.map((team: any) => ({
+    label: team.team_name,
+    value: String(team.id)
+  }))
+)
 
 const memberTabItems = computed(() => [
   { text: t('admin.project_members'), value: 'members' },
@@ -159,6 +193,55 @@ const handleShowTeamMembers = async (record: any) => {
   await viewTeamMembersModal({ team_id: record.team_id })
 }
 
+const handleAddTeam = async () => {
+  showAddTeam.value = true
+  try {
+    const res: any = await getTeamList()
+    if (res.error_code === 0) {
+      allTeams.value = res.data || []
+    }
+  } catch (error) {
+    console.error('获取团队列表失败:', error)
+  }
+}
+
+const handleSubmitAddTeam = async () => {
+  if (!selectedTeamId.value) {
+    message.warning(t('admin.select_team'))
+    return
+  }
+  try {
+    const res: any = await saveTeamItem(String(props.item_id), selectedTeamId.value)
+    if (res.error_code === 0) {
+      message.success(t('common.op_success'))
+      showAddTeam.value = false
+      selectedTeamId.value = ''
+      fetchTeamList()
+    } else {
+      message.error(res.error_message || t('common.op_failed'))
+    }
+  } catch (error) {
+    message.error(t('common.op_failed'))
+  }
+}
+
+const handleUnbindTeam = async (record: any) => {
+  const confirmed = await ConfirmModal(t('admin.confirm_unbind_team'))
+  if (confirmed) {
+    try {
+      const res: any = await deleteTeamItem(record.id)
+      if (res.error_code === 0) {
+        message.success(t('common.op_success'))
+        fetchTeamList()
+      } else {
+        message.error(res.error_message || t('common.op_failed'))
+      }
+    } catch (error) {
+      message.error(t('common.op_failed'))
+    }
+  }
+}
+
 const handleClose = () => props.onClose()
 
 onMounted(() => {
@@ -171,6 +254,24 @@ onMounted(() => {
 <style lang="scss" scoped>
 .modal-toolbar {
   margin-bottom: 16px;
+}
+
+.add-team-inline {
+  margin-bottom: 16px;
+  padding: 12px;
+  background: var(--color-bg-secondary);
+  border-radius: 8px;
+}
+
+.add-team-form {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  .common-selector,
+  :deep(.ant-select) {
+    flex: 1;
+  }
 }
 
 .member-content {

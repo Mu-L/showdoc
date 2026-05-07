@@ -87,7 +87,13 @@ class ItemMember
             }
 
             $memberGroupId = (int) ($data['member_group_id'] ?? 0);
-            $groupName = $memberGroupId === 1 ? '编辑' : '只读';
+            if ($memberGroupId === 2) {
+                $groupName = '管理';
+            } elseif ($memberGroupId === 1) {
+                $groupName = '编辑';
+            } else {
+                $groupName = '只读';
+            }
             $data['member_group'] = "{$groupName}/目录：{$data['cat_name']}";
 
             $result[] = $data;

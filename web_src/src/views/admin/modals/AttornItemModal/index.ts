@@ -9,8 +9,8 @@ export default function (params: AttornItemModalParams): Promise<boolean> {
   return new Promise((resolve) => {
     const { app, mountNode } = createModalApp(Component, {
       ...params,
-      onClose: (result: boolean) => {
-        resolve(result)
+      onClose: (result: boolean, data: any) => {
+        resolve(result ? data : false)
         destroyModalApp(app, mountNode)
       }
     })

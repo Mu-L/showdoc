@@ -43,13 +43,17 @@ const handleConfirm = async () => {
     return
   }
   try {
-    await saveMember({
+    const res: any = await saveMember({
       item_id: String(props.item_id),
       username: username.value,
       member_group_id: 1
     })
-    message.success(t('admin.add_member_success'))
-    props.onClose(true, username.value)
+    if (res.error_code === 0) {
+      message.success(t('admin.add_member_success'))
+      props.onClose(true, username.value)
+    } else {
+      message.error(res.error_message || t('common.op_failed'))
+    }
   } catch (error) {
     message.error(t('common.op_failed'))
   }
