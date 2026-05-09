@@ -40,6 +40,7 @@ import { ref, onMounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import request from '@/utils/request'
+import { getStaticPath } from '@/utils/system'
 import CommonButton from '@/components/CommonButton.vue'
 
 // Composables
@@ -137,16 +138,18 @@ const loadDiffScripts = async () => {
     })
   }
 
+  const staticPath = getStaticPath()
+
   // 加载链接 CSS
   const link = document.createElement('link')
-  link.href = '/diff/diffview.css'
+  link.href = `${staticPath}diff/diffview.css`
   link.rel = 'stylesheet'
   document.head.appendChild(link)
 
   // 加载 jsdifflib 和 diffview
   try {
-    await loadScript('/diff/difflib.js')
-    await loadScript('/diff/diffview.js')
+    await loadScript(`${staticPath}diff/difflib.js`)
+    await loadScript(`${staticPath}diff/diffview.js`)
   } catch (error) {
     console.error('加载 diff 脚本失败:', error)
   }
