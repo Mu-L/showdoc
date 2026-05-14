@@ -12,7 +12,7 @@
         <div
           v-for="(item, index) in tocItems"
           :key="index"
-          :class="['toc-item', `toc-level-${item.level}`, { 'is-active': activeId === item.id }]"
+          :class="['toc-item', `toc-level-${item.level}`, { 'is-active': activeId === item.anchorClass }]"
           @click="scrollToHeading(item.anchorClass)"
         >
           <span>{{ item.text }}</span>
@@ -155,7 +155,7 @@ const handleScroll = () => {
   }
 
   if (activeItem) {
-    activeId.value = activeItem.id
+    activeId.value = activeItem.anchorClass
   }
 }
 
