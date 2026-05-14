@@ -185,10 +185,23 @@ class PageHandler extends McpHandler
     $pageId = (int) ($params['page_id'] ?? 0);
     $itemId = (int) ($params['item_id'] ?? 0);
     $pageTitle = trim($params['page_title'] ?? '');
+    $uniqueKey = trim($params['unique_key'] ?? '');
 
-    // 支持通过 page_id 或 item_id + page_title 获取
-    if ($pageId <= 0 && ($itemId <= 0 || $pageTitle === '')) {
-      McpError::throw(McpError::INVALID_PARAMS, '请提供 page_id 或 item_id + page_title');
+    // 支持通过 page_id、item_id + page_title 或 unique_key 获取
+    if ($pageId <= 0 && ($itemId <= 0 || $pageTitle === '') && $uniqueKey === '') {
+      McpError::throw(McpError::INVALID_PARAMS, '请提供 page_id、item_id + page_title 或 unique_key');
+    }
+
+    // 如果是通过 unique_key 查找
+    if ($pageId <= 0 && $uniqueKey !== '') {
+      $single = \App\Model\SinglePage::findByUniqueKey($uniqueKey);
+      if (!$single) {
+        McpError::throw(McpError::RESOURCE_NOT_FOUND, 'unique_key 对应的分享链接不存在或已过期');
+      }
+      $pageId = (int) ($single->page_id ?? 0);
+      if ($pageId <= 0) {
+        McpError::throw(McpError::RESOURCE_NOT_FOUND, 'unique_key 对应的页面不存在');
+      }
     }
 
     // 如果是通过标题查找（开源版：使用单表 page）

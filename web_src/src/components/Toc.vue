@@ -13,7 +13,7 @@
           v-for="(item, index) in tocItems"
           :key="index"
           :class="['toc-item', `toc-level-${item.level}`, { 'is-active': activeId === item.id }]"
-          @click="scrollToHeading(item.id)"
+          @click="scrollToHeading(item.anchorClass)"
         >
           <span>{{ item.text }}</span>
         </div>
@@ -33,6 +33,7 @@ import { ref, onMounted, onBeforeUnmount } from 'vue'
 
 interface TocItem {
   id: string
+  anchorClass: string
   text: string
   level: number
 }
@@ -46,12 +47,15 @@ const isGenerating = ref(true)
 const generateToc = () => {
   isGenerating.value = true
 
-  // 尝试多个可能的选择器（支持 Editormd）
+  // 尝试多个可能的选择器（同时支持 Vditor 和 Editormd）
   const selectors = [
-    // Editormd 预览容器
+    // Editormd 预览容器（优先，因为现在使用 Editormd）
     '.editormd-preview-container h1, .editormd-preview-container h2, .editormd-preview-container h3, .editormd-preview-container h4, .editormd-preview-container h5, .editormd-preview-container h6',
     '.editormd-preview h1, .editormd-preview h2, .editormd-preview h3, .editormd-preview h4, .editormd-preview h5, .editormd-preview h6',
     '.markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4, .markdown-body h5, .markdown-body h6',
+    // Vditor 编辑器（兼容旧版）
+    '.vditor-reset h1, .vditor-reset h2, .vditor-reset h3, .vditor-reset h4, .vditor-reset h5, .vditor-reset h6',
+    '.vditor-preview h1, .vditor-preview h2, .vditor-preview h3, .vditor-preview h4, .vditor-preview h5, .vditor-preview h6',
     // 页面内容主容器（备用）
     '#page-content-main h1, #page-content-main h2, #page-content-main h3, #page-content-main h4, #page-content-main h5, #page-content-main h6'
   ]
@@ -71,35 +75,20 @@ const generateToc = () => {
 
   tocItems.value = []
 
-  // 追踪每个 id 的出现次数，用于去重
-  const idCounts: Record<string, number> = {}
+  headings.forEach((heading, index) => {
+    const id = heading.getAttribute('id') || ''
+    const anchorClass = `toc-anchor-${index}`
 
-  headings.forEach((heading) => {
-    let id = heading.getAttribute('id')
-
-    // 如果标题没有 ID，生成一个
-    if (!id) {
-      const level = heading.tagName.charAt(1)
-      id = `heading-${level}-${Math.random().toString(36).substr(2, 9)}`
-      heading.setAttribute('id', id)
-    }
-
-    // 同名标题去重：第一个保持原 id，后续追加 -1, -2 ... 后缀
-    if (idCounts[id] !== undefined) {
-      idCounts[id]++
-      const newId = `${id}-${idCounts[id]}`
-      heading.setAttribute('id', newId)
-      id = newId
-    } else {
-      idCounts[id] = 0
-    }
+    // 给标题添加唯一 class，用于 TOC 跳转和激活检测
+    heading.classList.add(anchorClass)
 
     const text = heading.textContent || ''
     const level = parseInt(heading.tagName.charAt(1))
 
-    if (id && text) {
+    if (text) {
       tocItems.value.push({
         id,
+        anchorClass,
         text,
         level
       })
@@ -131,8 +120,8 @@ const generateToc = () => {
 }
 
 // 滚动到指定标题
-const scrollToHeading = (id: string) => {
-  const element = document.getElementById(id)
+const scrollToHeading = (anchorClass: string) => {
+  const element = document.querySelector('.' + anchorClass)
   if (element) {
     const offset = 120
     const elementPosition = element.getBoundingClientRect().top
@@ -152,45 +141,21 @@ const toggleToc = () => {
 
 // 监听滚动事件，更新激活状态
 const handleScroll = () => {
-  // 尝试多个可能的选择器（同时支持 Vditor 和 Editormd）
-  const selectors = [
-    // Editormd 预览容器（优先）
-    '.editormd-preview-container h1, .editormd-preview-container h2, .editormd-preview-container h3, .editormd-preview-container h4, .editormd-preview-container h5, .editormd-preview-container h6',
-    '.editormd-preview h1, .editormd-preview h2, .editormd-preview h3, .editormd-preview h4, .editormd-preview h5, .editormd-preview h6',
-    '.markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4, .markdown-body h5, .markdown-body h6',
-    // Vditor 编辑器（兼容旧版）
-    '.vditor-reset h1, .vditor-reset h2, .vditor-reset h3, .vditor-reset h4, .vditor-reset h5, .vditor-reset h6',
-    '.vditor-preview h1, .vditor-preview h2, .vditor-preview h3, .vditor-preview h4, .vditor-preview h5, .vditor-preview h6',
-    // 页面内容主容器（备用）
-    '#page-content-main h1, #page-content-main h2, #page-content-main h3, #page-content-main h4, #page-content-main h5, #page-content-main h6'
-  ]
-
-  let headings: NodeListOf<Element> | null = null
-
-  for (const selector of selectors) {
-    headings = document.querySelectorAll(selector)
-    if (headings.length > 0) {
-      break
-    }
-  }
-
-  if (!headings || headings.length === 0) {
-    headings = document.querySelectorAll('.editormd-preview-container h1, .editormd-preview-container h2, .editormd-preview-container h3, .editormd-preview-container h4, .editormd-preview-container h5, .editormd-preview-container h6')
-  }
-
   const scrollPosition = window.pageYOffset + 150
 
-  let activeElement: any = null
-  headings.forEach((heading) => {
-    const headingPosition = heading.getBoundingClientRect().top + window.pageYOffset
+  let activeItem: TocItem | null = null
+  for (const item of tocItems.value) {
+    const element = document.querySelector('.' + item.anchorClass)
+    if (!element) continue
 
+    const headingPosition = element.getBoundingClientRect().top + window.pageYOffset
     if (headingPosition <= scrollPosition) {
-      activeElement = heading
+      activeItem = item
     }
-  })
+  }
 
-  if (activeElement) {
-    activeId.value = activeElement.getAttribute('id') || ''
+  if (activeItem) {
+    activeId.value = activeItem.id
   }
 }
 

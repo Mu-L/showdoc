@@ -274,7 +274,7 @@ class McpServer
     // 页面管理
     $this->tools['list_pages'] = [
       'name' => 'list_pages',
-      'description' => '获取项目/目录下的页面列表（分页，不含内容）。注意：当项目 item_type=6（看板）时，请使用 kanban_get_board 获取板面，kanban_list_tasks 筛选任务；当项目 item_type=3（RunApi）时，请使用 get_runapi_page 获取接口详情',
+      'description' => '获取项目/目录下的页面列表（分页，不含内容）。注意：当项目 item_type=6（看板）时，请使用 kanban_get_board 获取板面，kanban_list_tasks 筛选任务；当项目 item_type=3（RunApi）时，请使用 get_runapi_page 获取接口详情。对于 item_type=2（单页项目），此工具只会返回一个页面，AI 应先调用 list_pages 获取唯一页面的 page_id，再用 get_page 获取内容',
       'inputSchema' => [
         'type' => 'object',
         'properties' => [
@@ -302,7 +302,7 @@ class McpServer
 
     $this->tools['get_page'] = [
       'name' => 'get_page',
-      'description' => '获取页面详情。注意：当项目 item_type=6（看板）时，请使用 kanban_get_task 获取任务详情；当项目 item_type=3（RunApi）时，请使用 get_runapi_page 获取接口详情',
+      'description' => '获取页面详情。支持三种查找方式：page_id 直接获取、item_id + page_title 按标题查找、unique_key 通过唯一标识获取。注意：当项目 item_type=6（看板）时，请使用 kanban_get_task 获取任务详情；当项目 item_type=3（RunApi）时，请使用 get_runapi_page 获取接口详情',
       'inputSchema' => [
         'type' => 'object',
         'properties' => [
@@ -317,6 +317,10 @@ class McpServer
           'page_title' => [
             'type' => 'string',
             'description' => '页面标题（与item_id配合使用）',
+          ],
+          'unique_key' => [
+            'type' => 'string',
+            'description' => '页面唯一标识（通过 single_page 表查找页面，适用于单页分享链接场景）',
           ],
         ],
       ],
